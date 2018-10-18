@@ -8,8 +8,9 @@ from data_provider import make_cifar10_dataloader, Provider
 
 def run_test():
 
-    controller = MicroController(8,8)
-    # controller.cuda()
+    controller = MicroController(8,8, cuda=True)
+    controller.cuda()
+
     max_iter = 10000
     for step in range(max_iter):
         actions, log_probs, entropy = controller()
@@ -67,7 +68,7 @@ def test_child():
 
 
 if __name__ == '__main__':
-    # run_test()
+    run_test()
     # test_block()
     # test_skeletion()
-    test_child()
+    # test_child()

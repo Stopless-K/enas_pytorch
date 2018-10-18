@@ -65,8 +65,8 @@ def _make_loaders(trainset, testset, train_size, seed , batch_size,
 
     return {
         "train": trainloader,
-        "test": testloader,
-        "val": valloader,
+        "test":  testloader,
+        "val":   valloader,
     }
 
 

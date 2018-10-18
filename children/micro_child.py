@@ -223,6 +223,8 @@ class EnasNet(nn.Module):
         self.decay_learning_rate(step)
 
         x_batch, y_batch = next(self.provider)
+        x_batch = x_batch.cuda()
+        y_batch = y_batch.cuda()
         logits = self.model(x_batch, arc)
         loss= self.loss(logits, y_batch)
 
@@ -241,7 +243,7 @@ class EnasNet(nn.Module):
 
         # print(torch.argmax(logits, dim=-1) == y_batch)
 
-        acc = (torch.argmax(logits, dim=-1) == y_batch).sum().float() / x_batch.shape[0]
+        acc = (torch.argmax(logits, dim=-1) == y_batch).sum() / x_batch.shape[0]
 
 
         return loss, acc
@@ -281,15 +283,15 @@ class EnasNet(nn.Module):
             param_group['lr'] = self.lr_scheduler(param_group['lr'], step)
 
 
-
-
     def evaluate(self, arc):
         #todo evaluate on validation set
 
         acc = []
         for x_batch, y_batch in self.test_loader:
+            x_batch = x_batch.cuda()
+            y_batch = y_batch.cuda()
             logits = self.model(x_batch, arc)
-            acc.append((torch.argmax(logits, dim=-1) == y_batch).sum().float() / x_batch.shape[0])
+            acc.append((torch.argmax(logits, dim=-1) == y_batch).sum() / x_batch.shape[0])
 
 
         return np.mean(acc)

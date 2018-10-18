@@ -113,12 +113,12 @@ class StackLSTM(nn.Module):
         next_h, next_c = [],[]
 
         for layer, (h, c) in enumerate(zip(prev_h, prev_c)):
+
+
             lstm_layer = self.stack_lstm[layer]
             if layer > 0: inputs = next_h[-1]
 
-            # print(inputs)
-            # print(h)
-            # print(c)
+
             h_1, c_1 = lstm_layer(inputs, (h,c))
             next_h.append(h_1)
             next_c.append(c_1)
