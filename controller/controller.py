@@ -29,16 +29,17 @@ class Controller(nn.Module):
     def advantage(self, reward, entropy=None):
         #what should be the initial value for baseline?
 
-        reward = reward.view(-1, 1)
         if not self.baseline:
-            self.baseline = Variable(torch.zeros(1, dtype= torch.float32), requires_grad = False)
+            self.baseline = Variable(torch.zeros([1,1], dtype= torch.float32), requires_grad = False)
             if self.is_cuda: self.baseline = self.baseline.cuda()
-        else:
-            self.baseline = self.bl_dec* self.baseline + (1- self.bl_dec)* reward
+        
+        self.baseline = self.bl_dec* self.baseline + (1- self.bl_dec)* reward
 
 
         if self.entropy_weight:
             assert  entropy
+            print('entropy-----')
+            print(entropy)
             reward += self.entropy_weight* entropy
 
         return reward - self.baseline
@@ -46,7 +47,8 @@ class Controller(nn.Module):
     def reinforce_train(self, controller_step, reward, log_prob, entropy=None):
 
         advantage = self.advantage(reward, entropy)
-
+        print('advantage:')
+        print(advantage)
         loss = -(log_prob * advantage).sum()
         #lr schedule
         self.decay_learning_rate(controller_step)

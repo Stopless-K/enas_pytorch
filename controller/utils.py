@@ -6,7 +6,7 @@ def process_logits(logits, temperature, tanh_constant):
     if temperature:
         logits = logits/ temperature
     if tanh_constant:
-        logits = tanh_constant* nn.Tanh(logits)
+        logits = tanh_constant* F.tanh(logits)
 
     return logits
 

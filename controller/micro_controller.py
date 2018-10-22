@@ -64,7 +64,7 @@ class MicroController(Controller):
             param.data.uniform_(-init_bound, init_bound)
 
         #init decoder b to bias first two ops, see https://github.com/melodyguan/enas/issues/46
-        self.decoder.bias[:2].data.fill_(1)
+        self.decoder.bias[:2].data.fill_(10)
         self.decoder.bias[2:].data.fill_(0)
 
     def __call__(self, prev_h=None, prev_c=None, *args, **kwargs):

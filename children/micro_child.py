@@ -110,7 +110,7 @@ class EnasBlock(nn.Module):
 
 class Skeletion(nn.Module):
 
-    def __init__(self, in_channel=3, num_nodes= 2, num_operations=5, channels =(8,8,16,16,32,32,64,64),
+    def __init__(self, in_channel=3, num_nodes= 2, num_operations=5, channels =(8,8,16,16,32,32,64,64),dropout_keep_prob= 0.6,
                  num_classes=10, ):
         super(Skeletion,self).__init__()
         self.in_channel = in_channel
@@ -120,7 +120,8 @@ class Skeletion(nn.Module):
         self.num_operations = num_operations
 
         self.num_layers = len(channels)
-        self.pool_layers = [0, 2, 4, 6] # pool to reduce spatial dimension at these layers
+        self.keep_prob = dropout_keep_prob
+        self.pool_layers = [0, 2, 4] # pool to reduce spatial dimension at these layers
 
         self.conv_stem = nn.Conv2d(in_channel, channels[0]*3, kernel_size=3, padding=1)
         self.bn_stem = nn.BatchNorm2d(channels[0]*3)
@@ -181,7 +182,8 @@ class Skeletion(nn.Module):
 
         # print(x)
         x = F.adaptive_avg_pool2d(x, (1,1))
-
+        if self.keep_prob is not None:
+            x = F.dropout(x, 1- self.keep_prob, self.training) 
         x = self.fc(x.view(x.shape[0],-1))
 
         return x
@@ -192,6 +194,7 @@ class EnasNet(nn.Module):
                  num_nodes=2,
                  num_classes=10,
                  num_operations=5,
+                 dropout_keep_prob = 0.6,
                  channels=(8,8,16,16),
 
                  grad_bound = None,
@@ -209,6 +212,7 @@ class EnasNet(nn.Module):
         self.num_nodes = num_nodes
         self.num_classes = num_classes
         self.num_operations = num_operations
+        self.dropout_keep_prob = dropout_keep_prob
         self.channels = channels
         self.lr_scheduler = lr_scheduler
         self.grad_bound = grad_bound
@@ -243,7 +247,7 @@ class EnasNet(nn.Module):
 
         # print(torch.argmax(logits, dim=-1) == y_batch)
 
-        acc = (torch.argmax(logits, dim=-1) == y_batch).sum() / x_batch.shape[0]
+        acc = (torch.argmax(logits, dim=-1) == y_batch).sum().float() / x_batch.shape[0]
 
 
         return loss, acc
@@ -260,6 +264,7 @@ class EnasNet(nn.Module):
                                self.num_nodes,
                                self.num_operations,
                                self.channels,
+                               self.dropout_keep_prob, 
                                self.num_classes,
                                )
 
@@ -268,10 +273,13 @@ class EnasNet(nn.Module):
         opt_name = params['opt']
 
         init_lr = params['lr']
+         
+        l2_reg = params['l2_reg']
 
         if opt_name == 'adam':
             self.opt = torch.optim.Adam(self.model.parameters(),
-                                        lr = init_lr
+                                        lr = init_lr,
+                                        weight_decay= l2_reg
                                         )
 
     def decay_learning_rate(self,step):
@@ -287,14 +295,23 @@ class EnasNet(nn.Module):
         #todo evaluate on validation set
 
         acc = []
+        loss = []
         for x_batch, y_batch in self.test_loader:
+        
             x_batch = x_batch.cuda()
             y_batch = y_batch.cuda()
             logits = self.model(x_batch, arc)
-            acc.append((torch.argmax(logits, dim=-1) == y_batch).sum() / x_batch.shape[0])
+         #   print(logits)
+         #   print('up logits down softmax___________________--------------------------------------------------------')
+         #   print(F.softmax(logits, -1))
+            loss.append(float(self.loss(logits, y_batch).mean()))
+            
 
+            pred = torch.argmax(logits, dim=-1)
+            acc.append(float(((pred == y_batch).sum().float()/ x_batch.shape[0]).mean()))
+            
 
-        return np.mean(acc)
+        return np.mean(loss), np.mean(acc)
 
 
 

@@ -1,6 +1,7 @@
 import os
 import argparse
 import torch
+import torch.nn as nn
 from controller.micro_controller import MicroController
 from children.micro_child import EnasNet
 import numpy as np
@@ -36,10 +37,10 @@ def parse_args():
 
     parser.add_argument('--child_grad_bound', type=float,
                         default=5.0)  #child gradient clipping
-    parser.add_argument('--child_opt', type=str,default='adam')
+    parser.add_argument('--child_optimizer', type=str,default='adam')
     parser.add_argument('--child_lr', type=float, default=0.1)
     parser.add_argument('--child_l2_reg', type=float, default=1e-4)
-    parser.add_argument('--child_lr_decay_every', type=int, default=100)
+    parser.add_argument('--child_lr_dec_every', type=int, default=10000)
     parser.add_argument('--child_decay_type', type=str, default='cosine')
     parser.add_argument('--child_lr_dec_rate', type=float, default=0.1)
     parser.add_argument('--child_lr_cosine', type=bool, default=True)
@@ -55,9 +56,6 @@ def parse_args():
 
     parser.add_argument('--batch_size', type=int, default=160)
 
-
-
-
     return parser.parse_args()
 
 def run():
@@ -68,9 +66,9 @@ def run():
 
     #make dataset
 
-    cifar_loader = make_cifar10_dataloader(batch_size= args.batch_size)
+    cifar_loader = make_cifar10_dataloader(train_size= 0.9, batch_size= args.batch_size)
     cifar_train_loader = cifar_loader['train']
-    cifar_test_loader = cifar_loader['test']
+    cifar_val_loader = cifar_loader['val']
     cifar_provider = Provider(cifar_train_loader)
 
     #contorller
@@ -102,53 +100,60 @@ def run():
         lr_dec_rate= args.child_lr_dec_rate,
         lr_cosine= args.child_lr_cosine,
         lr_max= args.child_lr_max,
-        lr_min= args.child_lr_mim,
+        lr_min= args.child_lr_min,
         lr_t_0= args.child_lr_t_0,
         lr_t_mul= args.child_lr_t_mul
         )
 
     child = EnasNet(
         cifar_provider,
-        cifar_test_loader,
+        cifar_val_loader,
         config.in_channel,
         config.img_shape,
         lr_scheduler= child_lr_scheduler,
         num_nodes= args.num_nodes,
         num_classes= config.num_classes,
         num_operations=args.num_operations,
-        grad_bound= args.grad_bound,
+        channels = config.channels,
+        dropout_keep_prob = 0.7, 
+        grad_bound= args.child_grad_bound,
         opt_params = {
             'opt': args.child_optimizer,
-            'lr': args.child_lr
+            'lr': args.child_lr,
+            'l2_reg': args.child_l2_reg
         }
             ).cuda()
 
-    #train
+    chiild = nn.DataParallel(child, [0,1,2,3])
+     #train
 
     print('start training.')
 
     step = 0
+    child.train()
+    num_batches_epoch = child.provider.batches_per_epoch
     while True:
         #train child
         epoch = child.provider.epoch
         arc, _, _ = controller()
         loss, acc = child.train_step(step, arc)
 
-
         if step % args.log_every == 0:
             #log info
             print('loss:{}, acc:{}'.format(loss,acc))
 
-        if epoch % args.eval_every_epoch == 0:
+        if step %num_batches_epoch == 0    and step >0 and  epoch % args.eval_every_epoch == 0:
+  #          child.eval()
             loss,acc = child.evaluate(arc)
             print('evaluate at step {}, loss:{}, acc:{}'.format(step, loss, acc))
 
             #start training controller
-            if epoch % args.train_controller_every == 0:
+            if epoch % args.controller_train_every == 0:
 
                 for i in range(args.controller_train_steps):
                     arc, log_prob, entroy = controller()
-                    reward = child.evaluate(arc)
+                    _, acc = child.evaluate(arc)
+                    reward = torch.from_numpy(np.array(acc).reshape(-1,1)).cuda().float()
                     loss = controller.reinforce_train(i, reward, log_prob, entroy)
 
                     print('controller loss: {}'.format(loss))
@@ -159,17 +164,14 @@ def run():
                     arc, _, _ = controller()
                     acc = child.evaluate(arc)
                     print('-'*50)
-                    print(arc)
+                    print([int(each.cpu()) for each in arc])
                     print('val acc:{}'.format(acc))
-
+    
         if epoch % args.save_every_epoch == 0:
             torch.save(controller.state_dict(), args.output+'controller_ckpt.pkl')
             torch.save(child.state_dict(),args.output+ 'child_ckpt.pkl')
 
         step+= 1
 
-
-
-
-
-
+if __name__ == '__main__':
+    run()
